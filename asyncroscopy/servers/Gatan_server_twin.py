@@ -1,8 +1,14 @@
 # Gatan_server.py
+
+"""
+from the outside, this server should be indistinguishable from a real Gatan server.
+"""
+
 from twisted.internet import reactor
 import numpy as np
 import time
 from base_protocol import CommandProtocol, CommandFactory
+
 
 class GatanProtocol(CommandProtocol):
     def __init__(self):
@@ -13,14 +19,14 @@ class GatanProtocol(CommandProtocol):
 
     def get_spectrum(self, args):
         size = int(args[0])
-        print(f"[AS] Generating spectrum of size {size}")
+        print(f"[GATAN] Generating spectrum of size {size}")
         time.sleep(3)
 
         x = np.arange(size)
         spectrum = (np.exp(-x / 200) * 1000
          + 50 * np.exp(-0.5 * ((x - 150) / 5) ** 2)
          + 30 * np.exp(-0.5 * ((x - 300) / 8) ** 2)
-         + np.random.normal(0, 5, size)).astype(np.float32)
+         + np.random.normal(0, 5, size)).GATANtype(np.float32)
 
         return spectrum.tobytes()
 
