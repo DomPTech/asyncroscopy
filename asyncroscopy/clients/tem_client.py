@@ -97,9 +97,10 @@ class TEMClient:
 
     # Unique methods, including concurrent acquisitions
     # ================================================================
-    def get_image_and_spectrum(self, image_size, spectrum_size):
+    def get_image_and_spectrum(self, image_size: int, image_dwell_time: float,
+                    spectrum_size: int, spectrum_dwell_time: float) -> bytes:
         """Run both acquisitions concurrently and return results."""
-        future_img = self.executor.submit(self.get_image, image_size)
+        future_img = self.executor.submit(self.get_scanned_image, 'Haadf', image_size, image_dwell_time)
         future_spec = self.executor.submit(self.get_spectrum, spectrum_size)
         img = future_img.result()
         spec = future_spec.result()

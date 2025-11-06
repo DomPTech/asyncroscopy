@@ -56,7 +56,7 @@ class ASProtocol(ExecutionProtocol):
             return None
         else:
             self.factory.status = "Busy"
-            time.sleep(3)
+            time.sleep(5)
             image = (np.random.rand(size, size) * 255).astype(np.uint8)
             self.factory.status = "Ready"
             return image.tobytes()

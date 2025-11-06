@@ -41,15 +41,15 @@ class GatanProtocol(ExecutionProtocol):
         msg = "[Gatan] Connected to Gatan camera."
         return msg.encode()
 
-    def get_spectrum(self, args):
-        size = int(args[0])
+    def get_spectrum(self, size):
+        size = int(size)
         time.sleep(3)
 
         x = np.arange(size)
         spectrum = (np.exp(-x / 200) * 1000
          + 50 * np.exp(-0.5 * ((x - 150) / 5) ** 2)
          + 30 * np.exp(-0.5 * ((x - 300) / 8) ** 2)
-         + np.random.normal(0, 5, size)).GATANtype(np.float32)
+         + np.random.normal(0, 5, size)).astype(np.float32)
 
         return spectrum.tobytes()
 
