@@ -79,6 +79,7 @@ class TEMClient:
     def get_scanned_image(self, scanning_detector: str, size: int, dwell_time: float) -> bytes:
         cmd = f"AS_get_scanned_image {scanning_detector} {size} {dwell_time}"
         data = self.send_command(cmd)
+
         image = np.frombuffer(data, dtype=np.uint8).reshape(size, size)
         return image
 

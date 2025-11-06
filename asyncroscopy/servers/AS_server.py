@@ -62,8 +62,8 @@ class ASProtocol(ExecutionProtocol):
         size = int(size)
         dwell_time = float(dwell_time)
         if dwell_time * size * size > 600: # frame time > 10 minutes
-            msg = f"Acquisition too long: {dwell_time*size*size} seconds"
-            return msg.encode()
+            print(f"[AS] Error: Acquisition too long: {dwell_time*size*size} seconds")
+            return None
         else:
             self.factory.status = "Busy"
             # image = self.microscope.acquisition.acquire_stem_image(
