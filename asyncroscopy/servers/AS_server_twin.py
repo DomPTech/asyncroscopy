@@ -34,21 +34,29 @@ class ASFactory(protocol.Factory):
 class ASProtocol(ExecutionProtocol):
     def __init__(self):
         super().__init__()
-        # Register supported commands
-        self.register_command("connect_AS", self.connect_AS)
-        self.register_command("get_scanned_image", self.get_scanned_image)
-        self.register_command("get_stage", self.get_stage)
-        self.register_command("get_status", self.get_status)
+        allowed = []
+        for name, value in ExecutionProtocol.__dict__.items():
+            if callable(value) and not name.startswith("_"):
+                allowed.append(name)
+        self.allowed_commands = set(allowed)
 
-    def connect_AS(self, host, port):
+    def connect_AS(self, args: dict):
         """Connect to the microscope via AutoScript"""
+        host = args.get('host')
+        port = args.get('port')
+        
+        print(f"[AS] Connecting to microscope at {host}:{port}...")
         self.factory.microscope = 'Debugging'
         self.factory.status = "Ready"
-        msg = "[AS] Connected to Digital Twin microscope."
-        return msg.encode()
+        msg = "Connected to Digital Twin microscope."
+        self.sendString(self.package_message(msg))
 
-    def get_scanned_image(self, scanning_detector, size, dwell_time):
+    def get_scanned_image(self, args: dict):
         """Return a scanned image using the indicated detector"""
+        scanning_detector = args.get('scanning_detector')
+        size = args.get('size')
+        dwell_time = args.get('dwell_time')
+
         size = int(size)
         dwell_time = float(dwell_time)
         if dwell_time * size * size > 600: # frame time > 10 minutes
@@ -59,17 +67,18 @@ class ASProtocol(ExecutionProtocol):
             time.sleep(5)
             image = (np.random.rand(size, size) * 255).astype(np.uint8)
             self.factory.status = "Ready"
-            return image.tobytes()
+            self.sendString(self.package_message(image))
 
-    def get_stage(self):
+    def get_stage(self, args=None):
         """Return current stage position (placeholder)"""
         positions = [np.random.uniform(-10, 10) for _ in range(5)]
-        return np.array(positions, dtype=np.float32).tobytes()
+        positions = np.array(positions, dtype=np.float32)
+        self.sendString(self.package_message(positions))
 
     def get_status(self, args=None):
         """Return the server status"""
         msg = f"Microscope is {self.factory.status}"
-        return msg.encode()
+        self.sendString(self.package_message(msg))
 
 
 if __name__ == "__main__":

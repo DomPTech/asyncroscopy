@@ -30,18 +30,16 @@ class GatanFactory(protocol.Factory):
 class GatanProtocol(ExecutionProtocol):
     def __init__(self):
         super().__init__()
-        # register supported commands
-        self.register_command("connect_Gatan", self.connect_Gatan)
-        self.register_command("get_spectrum", self.get_spectrum)
-        self.register_command("get_status", self.get_status)
 
-    def connect_Gatan(self, host, port):
-        """Connect to the Gatan camera via AutoScript"""
+    def connect_Gatan(self, args: dict):
+        """Connect to the Gatan camera via Gatan"""
         self.factory.status = "Ready"
-        msg = "[Gatan] Connected to Gatan camera."
-        return msg.encode()
+        msg = "[Gatan] Connected to Gatan."
+        self.sendString(self.package_message(msg))
 
-    def get_spectrum(self, size):
+    def get_spectrum(self, args: dict):
+        """Simulate a core-loss eels spectrum"""
+        size = args.get('size')
         size = int(size)
         time.sleep(3)
 
@@ -50,13 +48,14 @@ class GatanProtocol(ExecutionProtocol):
          + 50 * np.exp(-0.5 * ((x - 150) / 5) ** 2)
          + 30 * np.exp(-0.5 * ((x - 300) / 8) ** 2)
          + np.random.normal(0, 5, size)).astype(np.float32)
+        print(self.package_message(spectrum))
 
-        return spectrum.tobytes()
+        self.sendString(self.package_message(spectrum))
 
     def get_status(self, args=None):
         """Return the status"""
         msg = f"Gatan server is {self.factory.status}"
-        return msg.encode()
+        self.sendString(self.package_message(msg))
 
 
 if __name__ == "__main__":
