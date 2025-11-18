@@ -4,6 +4,7 @@ from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.protocols.basic import Int32StringReceiver
 from twisted.internet.defer import Deferred
+import numpy as np
 
 # Define backend server addresses
 routing_table = {"AS": ("localhost", 9001),
@@ -70,6 +71,48 @@ class CentralProtocol(Int32StringReceiver):
         
         # If no match, return error
         self.sendString(f"Unknown command prefix in '{msg}'".encode())
+    
+    def package_message(self, data):
+        """
+        Convert Python data into the protocol format:
+            b"[dtype,shape...]<binary payload>"
+        Compatible with the client's parsing logic.
+        """
+
+        # ----- Strings -----
+        if isinstance(data, str):
+            encoded = data.encode()
+            header = f"[str,{len(encoded)}]".encode()
+            return header + encoded
+
+        # ----- Bytes -----
+        if isinstance(data, (bytes, bytearray)):
+            # treat raw bytes as uint8 array
+            arr = np.frombuffer(data, dtype=np.uint8)
+            header = f"[uint8,{arr.size}]".encode()
+            return header + data
+
+        # ----- Scalars -----
+        if isinstance(data, (int, float)):
+            arr = np.array([data], dtype=np.float32)
+            header = f"[float32,1]".encode()
+            return header + arr.tobytes()
+
+        # ----- Lists / Tuples -----
+        if isinstance(data, (list, tuple)):
+            data = np.asarray(data)
+
+        # ----- NumPy Array -----
+        if isinstance(data, np.ndarray):
+            dtype = data.dtype.name       # e.g. "uint8", "float32"
+            shape = ",".join(str(x) for x in data.shape)
+            header = f"[{dtype},{shape}]".encode()
+            return header + data.tobytes()
+
+        # ----- Unknown object → stringify -----
+        text = str(data).encode()
+        header = f"[str,{len(text)}]".encode()
+        return header + text
 
     # Backend routing helper
     def _forward_to_backend(self, host, port, command: str):
@@ -93,6 +136,32 @@ class CentralProtocol(Int32StringReceiver):
 
     def _send_backend_error(self, err):
         self.sendString(f"[Central] Error communicating with backend server: {err}".encode())
+
+    # debug:
+    def _ask_backend(self, prefix: str, command: str) -> Deferred:
+        """
+        Connect to a backend server based on routing_table[prefix],
+        send a command, and return a Deferred that fires with the backend response.
+
+        This is a thin wrapper around _forward_to_backend logic,
+        but returns the raw Deferred so SmartProxy can compose calls.
+        """
+        if prefix not in self.routing_table:
+            raise ValueError(f"No backend named '{prefix}'")
+
+        host, port = self.routing_table[prefix]
+        d = Deferred()
+
+        endpoint = TCP4ClientEndpoint(reactor, host, port)
+
+        def on_connect(proto):
+            proto.sendCommand(command)
+            return d
+
+        connect_d = connectProtocol(endpoint, BackendClient(d))
+        connect_d.addCallback(on_connect)
+        connect_d.addErrback(d.errback)
+        return d
 
 
 class BackendClient(Int32StringReceiver):

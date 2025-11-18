@@ -78,9 +78,7 @@ class ExecutionProtocol(Int32StringReceiver):
     def package_message(self, data):
         """
         Convert Python data into the protocol format:
-        
-            b"[dtype,shape...]<binary payload>"
-        
+        b"[dtype,shape...]<binary payload>"
         Compatible with the client's parsing logic.
         """
 
