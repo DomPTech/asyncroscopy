@@ -12,6 +12,7 @@ import traceback
 import socket
 from twisted.internet import reactor,defer, protocol
 from asyncroscopy.servers.protocols.execution_protocol import ExecutionProtocol
+from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 
 logging.basicConfig()
 log = logging.getLogger('CEOS_acquisition')
@@ -40,7 +41,7 @@ class CeosProtocol(ExecutionProtocol):
     def getInfo(self, args_dict=None):
         """Get microscope info."""
         msg = f"CEOS Digital Twin Server"
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
     
     def uploadAberrations(self, args_dict):
         """Upload aberration data."""
@@ -52,7 +53,7 @@ class CeosProtocol(ExecutionProtocol):
         self.factory.aberrations.update(args_dict)
         print("args_dict:", args_dict)
         msg = 'Aberrations Loaded'
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
     
     def runTableau(self, args_dict):
         """Run a tableau acquisition."""
@@ -62,12 +63,21 @@ class CeosProtocol(ExecutionProtocol):
     def correctAberration(self, args_dict):
         """Correct an aberration."""
         # args = {"name": name, "value": [...], "target": [...], "select": ...}
+        name = args_dict.get("name")
+        value = float(args_dict.get("value", 0))
+        self.factory.aberrations[name] = value
+        msg = f'Aberration {name} changed to {value}'
+        self.sendString(package_message(msg))
     
     def measure_c1a1(self):
         """Measure C1 and A1 aberrations."""
         # no args
         pass
 
+    def getAberrations(self, args_dict):
+        """Get current aberrations."""
+        msg = self.factory.aberrations
+        self.sendString(package_message(msg))
 
 if __name__ == "__main__":
     port = 9003

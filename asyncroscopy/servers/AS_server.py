@@ -10,6 +10,7 @@ import time
 import sys
 
 from asyncroscopy.servers.protocols.execution_protocol import ExecutionProtocol
+from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 # sys.path.insert(0, "C:\\AE_future\\autoscript_1_14\\")
 sys.path.insert(0, "/Users/austin/Desktop/Projects/autoscript_tem_microscope_client")
 import autoscript_tem_microscope_client as auto_script
@@ -49,7 +50,7 @@ class ASProtocol(ExecutionProtocol):
         except Exception as e:
             msg = f"[AS] Failed to connect to microscope: {e}"
             self.factory.microscope = None
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
 
     def get_scanned_image(self, scanning_detector, size, dwell_time):
         """Return a scanned image using the indicated detector"""
@@ -65,18 +66,18 @@ class ASProtocol(ExecutionProtocol):
                 size = size, 
                 dwell_time = dwell_time)
             self.factory.status = "Ready"
-            self.sendString(self.package_message(image))
+            self.sendString(package_message(image))
 
     def get_stage(self):
         """Return current stage position"""
         positions = self.factory.microscope.specimen.stage.position
         positions = np.array(positions, dtype=np.float32)
-        self.sendString(self.package_message(positions))
+        self.sendString(package_message(positions))
 
     def get_status(self, args: dict = None):
         """Return the server status"""
         msg = f"Microscope is {self.factory.status}"
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
 
 
 if __name__ == "__main__":

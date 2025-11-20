@@ -10,6 +10,7 @@ import time
 import sys
 
 from asyncroscopy.servers.protocols.execution_protocol import ExecutionProtocol
+from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 
 
 # FACTORY — holds shared state (persistent across all connections)
@@ -35,7 +36,7 @@ class GatanProtocol(ExecutionProtocol):
         """Connect to the Gatan camera via Gatan"""
         self.factory.status = "Ready"
         msg = "[Gatan] Connected to Gatan."
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
 
     def get_spectrum(self, args: dict):
         """Simulate a core-loss eels spectrum"""
@@ -48,14 +49,14 @@ class GatanProtocol(ExecutionProtocol):
          + 50 * np.exp(-0.5 * ((x - 150) / 5) ** 2)
          + 30 * np.exp(-0.5 * ((x - 300) / 8) ** 2)
          + np.random.normal(0, 5, size)).astype(np.float32)
-        print(self.package_message(spectrum))
+        print(package_message(spectrum))
 
-        self.sendString(self.package_message(spectrum))
+        self.sendString(package_message(spectrum))
 
     def get_status(self, args=None):
         """Return the status"""
         msg = f"Gatan server is {self.factory.status}"
-        self.sendString(self.package_message(msg))
+        self.sendString(package_message(msg))
 
 
 if __name__ == "__main__":

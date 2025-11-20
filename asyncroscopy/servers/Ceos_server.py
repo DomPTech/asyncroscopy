@@ -12,6 +12,7 @@ import traceback
 import socket
 from twisted.internet import reactor,defer, protocol
 from asyncroscopy.servers.protocols.execution_protocol import ExecutionProtocol
+from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 
 logging.basicConfig()
 log = logging.getLogger('CEOS_acquisition')
@@ -75,7 +76,7 @@ class CeosProtocol(ExecutionProtocol):
                 buffer += chunk
 
         print("[Exec] Received netstring from CEOS:", buffer)
-        self.sendString(self.package_message(buffer))
+        self.sendString(package_message(buffer))
 
 
 if __name__ == "__main__":

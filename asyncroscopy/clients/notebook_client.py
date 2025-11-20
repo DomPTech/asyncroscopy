@@ -1,24 +1,36 @@
-# notebook_client.py
-'''Client for TEM central server.'''
+'''
+Client for TEM central server.
+Notebook-side client for the Central TEM server.
+
+Compatible with:
+ - Int32StringReceiver framing
+ - package_message() / unpackage_message() protocol
+ - Backend routing (AS_get..., Gatan_get..., etc.)
+ - Central orchestration commands (Central_*)
+'''
+
 import socket
 import struct
 import numpy as np
+import threading
+from typing import List, Dict, Any, Tuple, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 
-# still needs a lot of work
 class NotebookClient:
     """Client for TEM central server."""
+
     def __init__(self, host="localhost", port=9000):
+        self.executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="Client")
         self.host = host
         self.port = port
 
     @classmethod
-    def connect(cls,  host="127.0.0.1", port=9000):
-        """Try to connect briefly to verify central server is up.
-        Returns TEMClient(host, port) on success, or None on failure.
-        """
+    def connect(cls, host="127.0.0.1", port=9000):
+        """Try to connect briefly to verify central server is up."""
         print(f"Connecting to central server {host}:{port}...")
         try:
-            with socket.create_connection((host, port), timeout=5) as s:
+            with socket.create_connection((host, port), timeout=5):
                 print("Connected to central server.")
             return cls(host, port)
         except (ConnectionRefusedError, socket.timeout):
@@ -26,42 +38,26 @@ class NotebookClient:
             return None
 
     def send_command(self, destination: str, command: str,
-                     args: dict | None = {},
-                     timeout: float | None = None) -> bytes:
-        """Send a length-prefixed command with args and receive a length-prefixed response."""
+                     args: dict | None = None,
+                     timeout: float | None = None):
+        """Send command + args, return decoded response payload."""
+        if args is None:
+            args = {}
+
         cmd = f"{destination}_{command} " + " ".join(f"{k}={v}" for k, v in args.items())
+        payload = cmd.encode()
+        header = struct.pack("!I", len(payload))
         try:
-            # Encode the command
-            payload = cmd.encode()
-            header = struct.pack("!I", len(payload))
-
             with socket.create_connection((self.host, self.port), timeout=timeout) as sock:
-                # Send length-prefixed message
+                # Send
                 sock.sendall(header + payload)
-
-                # Read the 4-byte response header
+                # Receive 4-byte response header
                 resp_hdr = self._recv_exact(sock, 4)
                 resp_len = struct.unpack("!I", resp_hdr)[0]
-
-                # Read full response
+                # Receive payload
                 data = self._recv_exact(sock, resp_len)
-                end_idx = data.index(b']') + 1
-                header = data[:end_idx].decode()  # header is text
-                payload = data[end_idx:]          # payload is binary
-                dtype, *shape = header[1:-1].split(',')
-                shape = tuple(map(int, shape))
+                dtype, shape, payload = unpackage_message(data)
 
-                if dtype == 'str':
-                    payload = payload.decode()
-                elif dtype == 'uint8':
-                    payload = np.frombuffer(payload, dtype=np.uint8).reshape(shape)
-                elif dtype == 'float32':
-                    payload = np.frombuffer(payload, dtype=np.float32).reshape(shape)
-                else:
-                    try: # try string
-                        payload = payload.decode()
-                    except:
-                        raise ValueError(f"Unknown data type in notebook client: {dtype}")
                 return payload
 
         except (ConnectionRefusedError, socket.timeout):
@@ -69,11 +65,59 @@ class NotebookClient:
             return None
 
     def _recv_exact(self, sock: socket.socket, n: int) -> bytes:
-        """Receive exactly n bytes or raise ConnectionError if socket closes early."""
+        """Receive exactly n bytes."""
         buf = b""
         while len(buf) < n:
             chunk = sock.recv(n - len(buf))
             if not chunk:
-                raise ConnectionError("Socket closed early while receiving data")
+                raise ConnectionError("Socket closed early")
             buf += chunk
         return buf
+
+    def send_parallel_commands(
+        self,
+        commands: Sequence[Tuple[str, str, dict | None]],
+        timeout: float = 30.0
+    ) -> List[Any]:
+        """
+        Send many commands in parallel (fire-and-forget style, but ordered results).
+
+        Example:
+            results = client.send_parallel_commands([
+                ("AS",   "get_stage", {}),
+                ("Ceos", "GetMagnification", {}),
+                ("AS",   "get_beam_current", {}),
+                ("Gatan", "CameraAcquire", {"exposure": 0.1}),
+            ])
+
+            stage, mag, current, image = results   # ← same order!
+
+        Returns list of decoded payloads (or None on failure).
+        """
+        if not commands:
+            return []
+
+        futures = []
+        for dest, cmd, args in commands:
+            future = self.executor.submit(
+                self.send_command,
+                destination=dest,
+                command=cmd,
+                args=args or {},
+                timeout=timeout
+            )
+            futures.append(future)
+
+        # Preserve original order
+        results = []
+        for future in as_completed(futures):
+            # Find which index this future belongs to
+            idx = futures.index(future)
+            try:
+                results.append((idx, future.result()))
+            except Exception as e:
+                results.append((idx, e))
+
+        # Sort by original index and extract values
+        results.sort(key=lambda x: x[0])
+        return [r if not isinstance(r, Exception) else None for _, r in results]
