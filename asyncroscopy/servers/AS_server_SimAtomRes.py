@@ -16,6 +16,14 @@ from asyncroscopy.clients.notebook_client import NotebookClient
 from asyncroscopy.servers.protocols.execution_protocol import ExecutionProtocol
 from asyncroscopy.servers.protocols.utils import package_message, unpackage_message
 
+from pathlib import Path
+from ase.io import read
+
+HERE = Path(__file__).resolve().parent
+PROJECT_ROOT = HERE.parent  # removes "servers"
+
+
+
 try:
     from ase.io import read
 except ImportError:
@@ -100,7 +108,16 @@ class ASProtocol(ExecutionProtocol):
 
             # make image
             # with pystemsim data generator
-            xtal = read('asyncroscopy/cloned_repos/pystemsim/WS2_ortho.cif')
+            # print("check the cif path ")
+            cif_path = (
+                PROJECT_ROOT
+                / "cloned_repos"
+                / "pystemsim"
+                / "WS2_ortho.cif"
+            )
+            print("Reading CIF from:", cif_path)
+            xtal = read(cif_path)
+            # xtal = read('asyncroscopy/cloned_repos/pystemsim/WS2_ortho.cif')
             xtal = xtal * (30, 20, 1)
             positions = xtal.get_positions()[:, :2]
             pixel_size = 0.106 # angstrom/pixel
