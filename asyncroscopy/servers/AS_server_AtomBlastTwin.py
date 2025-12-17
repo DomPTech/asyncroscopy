@@ -271,29 +271,11 @@ class ASProtocol(ExecutionProtocol):
         dose_map = self.factory.dose_map
         ny, nx = self.factory.grid_shape
 
-        # --------------------------------------------------
         # Knock-on cross sections at 200 kV (Å²)
-        # --------------------------------------------------
-        sigma_knockon = {
-            "S": 3e-7,
-            "Se": 1e-7,
-            "Mo": 1e-9,
-            "W": 5e-10,
-        }
+        sigma_knockon = {"S": 3e-7,"Se": 1e-7,"Mo": 1e-9,"W": 5e-10}
+        ideal_coordination = {"S": 3,"Se": 3,"Mo": 6,"W": 6}
 
-        # --------------------------------------------------
-        # Ideal coordination numbers
-        # --------------------------------------------------
-        ideal_coordination = {
-            "S": 3,
-            "Se": 3,
-            "Mo": 6,
-            "W": 6,
-        }
-
-        # --------------------------------------------------
         # Neighbor list (first shell only)
-        # --------------------------------------------------
         cutoffs = []
         for sym in symbols:
             if sym in ("S", "Se"):
@@ -306,65 +288,44 @@ class ASProtocol(ExecutionProtocol):
 
         atoms_to_remove = []
 
-        # --------------------------------------------------
         # Vacancy clustering parameters
-        # --------------------------------------------------
         alpha = 4.0  # coordination instability
-        beta = 4.0   # vacancy-edge enhancement
+        beta = 5.0   # vacancy-edge enhancement
 
         for i, (pos, sym) in enumerate(zip(positions, symbols)):
-            # -------------------------
             # Dose lookup
-            # -------------------------
             x, y = pos[:2]
             ix = int(x / pixel_size)
             iy = int(y / pixel_size)
-
             if not (0 <= ix < nx and 0 <= iy < ny):
                 continue
-
             local_dose = dose_map[iy, ix]
 
             sigma = sigma_knockon.get(sym, 0.0)
             if sigma <= 0.0:
                 continue
 
-            # -------------------------
             # Neighbor analysis
-            # -------------------------
             neighbors, offsets = nl.get_neighbors(i)
             N = len(neighbors)
             N0 = ideal_coordination.get(sym, N)
-
-            # Missing neighbors = adjacent vacancies
             missing = max(N0 - N, 0)
 
-            # -------------------------
             # Base knock-on probability
-            # -------------------------
             p_base = 1.0 - np.exp(-sigma * local_dose)
+            lambda_base = -np.log(1.0 - p_base) # rate-like form
 
-            # Convert to rate-like form
-            lambda_base = -np.log(1.0 - p_base)
-
-            # -------------------------
             # Coordination instability
-            # -------------------------
             if N < N0:
                 frac_lost = missing / N0
                 coord_factor = np.exp(alpha * frac_lost)
             else:
                 coord_factor = 1.0
 
-            # -------------------------
             # Vacancy clustering enhancement
-            # -------------------------
-            # Each missing neighbor boosts damage strongly
             vacancy_factor = np.exp(beta * missing / N0)
 
-            # -------------------------
             # Final probability
-            # -------------------------
             lambda_eff = lambda_base * coord_factor * vacancy_factor
             p_remove = 1.0 - np.exp(-lambda_eff)
 
@@ -378,65 +339,6 @@ class ASProtocol(ExecutionProtocol):
 
             self.log.info(f"[AS] Vacancy clustering removed {len(atoms_to_remove)} atoms")
 
-#     def _apply_damage_model(self):
-#         """
-#         Knock-on beam damage model for 200 kV STEM.
-#         
-#         P_remove = 1 - exp(-sigma(E) * local_dose)
-# 
-#         Dose units: e / Å²
-#         Cross sections: Å²
-#         """
-# 
-#         if self.factory.atoms is None:
-#             return
-# 
-#         atoms = self.factory.atoms
-#         positions = atoms.get_positions()[:, :2]
-#         symbols = atoms.get_chemical_symbols()
-# 
-#         pixel_size = self.factory.pixel_size
-#         dose_map = self.factory.dose_map
-#         ny, nx = self.factory.grid_shape
-# 
-#         # --------------------------------------------------
-#         # Knock-on cross sections at 200 kV (Å²)
-#         # Order-of-magnitude correct
-#         # --------------------------------------------------
-#         sigma_knockon_200kV = {
-#             "C": 1e-7,
-#             "S": 3e-7,
-#             "Se": 1e-7,
-#             "Mo": 1e-9,
-#             "W": 5e-10,
-#         }
-# 
-#         atoms_to_remove = []
-# 
-#         for i, ((x, y), sym) in enumerate(zip(positions, symbols)):
-#             ix = int(x / pixel_size)
-#             iy = int(y / pixel_size)
-# 
-#             if not (0 <= ix < nx and 0 <= iy < ny):
-#                 continue
-# 
-#             local_dose = dose_map[iy, ix]
-# 
-#             sigma = sigma_knockon_200kV.get(sym, 0.0)
-#             if sigma <= 0.0:
-#                 continue
-# 
-#             p_remove = 1.0 - np.exp(-sigma * local_dose)
-# 
-#             if np.random.rand() < p_remove:
-#                 atoms_to_remove.append(i)
-# 
-#         if atoms_to_remove:
-#             mask = np.ones(len(atoms), dtype=bool)
-#             mask[atoms_to_remove] = False
-#             self.factory.atoms = atoms[mask]
-# 
-#             self.log.info(f"[AS] 200 kV knock-on damage removed {len(atoms_to_remove)} atoms")
 
     def get_dose_map(self, args=None):
         """Return the current accumulated dose map"""
