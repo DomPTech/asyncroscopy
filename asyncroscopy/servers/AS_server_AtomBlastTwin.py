@@ -145,7 +145,7 @@ class ASProtocol(ExecutionProtocol):
         
         # Validate normalized coordinates
         if 0 <= x <= 1 and 0 <= y <= 1:
-            self.factory.beam_position = (x, y)
+            self.factory.beam_position = (y, x)
             # Convert to angstroms for logging
             x_ang = x * self.factory.fov
             y_ang = y * self.factory.fov
@@ -287,10 +287,10 @@ class ASProtocol(ExecutionProtocol):
         sigma_radiolysis = {"S": 5e-9,"Se": 2e-9,"Mo": 1e-10,"W": 5e-11}
 
         # Structural instability prefactor
-        gamma_instability = {"S": 0.3,"Se": 0.3,"Mo": 0.3,"W": 0.3}
+        gamma_instability = {"S": 0.5,"Se": 0.5,"Mo": 0.8,"W": 0.8}
 
         # Ideal coordination numbers
-        ideal_coordination = {"S": 3,"Se": 3,"Mo": 6,"W": 6,}
+        ideal_coordination = {"S": 3,"Se": 3,"Mo": 3,"W": 3,}
 
         # Neighbor list (first coordination shell)
         cutoffs = []
@@ -331,13 +331,13 @@ class ASProtocol(ExecutionProtocol):
             if missing > 0:
                 frac_lost = missing / N0
                 coord_amp = np.exp(frac_lost)
-                lambda_inst = (gamma_instability.get(sym, 0.0) * coord_amp * local_dose / 1e4) # change here
+                lambda_inst = (gamma_instability.get(sym, 0.0) * coord_amp * local_dose / 1e5) # change here
             else:
                 lambda_inst = 0.0
             if N <=1:
                 lambda_inst  = 1e6  # Isolated atom, very unstable
             # Total hazard and removal
-            lambda_total = lambda_knock + lambda_rad + lambda_inst
+            lambda_total = lambda_knock  + lambda_inst # lambda_rad (I want to add later with a different form)
             p_remove = 1.0 - np.exp(-lambda_total)
 
             if np.random.rand() < p_remove:
