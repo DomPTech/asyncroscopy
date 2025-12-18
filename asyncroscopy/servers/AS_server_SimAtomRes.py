@@ -80,7 +80,14 @@ class ASProtocol(ExecutionProtocol):
         msg = "Connected to Digital Twin microscope."
         self.sendString(package_message(msg))
 
-    # working here
+    def set_current(self, args: dict):
+        """Set the beam current (pA)"""
+        beam_current = args.get('beam_current')
+        self.factory.beam_current = float(beam_current)
+        self.log.info(f"[AS] Beam current set to {beam_current} pA")
+        msg = f"Beam current set to {beam_current} pA"
+        self.sendString(package_message(msg))
+
     def get_scanned_image(self, args: dict):
         """Return a scanned image using the indicated detector"""
         scanning_detector = args.get('scanning_detector')
@@ -127,7 +134,10 @@ class ASProtocol(ExecutionProtocol):
             probe = dg.get_probe(ab, potential)
             image = dg.convolve_kernel(potential, probe)
             noisy_image = dg.lowfreq_noise(image, noise_level=0.5, freq_scale=.04)
-            sim_im = dg.poisson_noise(noisy_image, counts=1e7)
+
+            scan_time = dwell_time * size * size
+            counts = scan_time * (self.factory.beam_current * 1e-12) / (1.602e-19)
+            sim_im = dg.poisson_noise(noisy_image, counts=counts)
             # convert args dict
 
             # time.sleep(1)
