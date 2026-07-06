@@ -73,6 +73,38 @@ def test_server_gui_omits_hardware_host_port_for_digital_twin_file():
     assert 'hardware_port' not in config['instrument']
 
 
+def test_server_gui_preserves_device_modules_from_config():
+    config = server_gui.server_config_from_values(
+        {
+            'instrument': {
+                'class_name': 'AutoScriptMicroscope',
+                'file': 'asyncroscopy/instruments/electron_microscope/auto_script.py',
+                'description': 'Real microscope',
+            },
+            'instrument_file': 'asyncroscopy/instruments/electron_microscope/auto_script.py',
+            'hardware_host': '10.0.0.1',
+            'hardware_port': '9095',
+            'hardware_timeout_seconds': '120',
+            'devices': {
+                'custom_detector': {'module_name': 'asyncroscopy.devices.custom_detector'},
+                'data': {'module_name': 'asyncroscopy.data.data'},
+            },
+            'enabled_devices': {'custom_detector': True, 'data': False},
+            'tango_host': 'localhost',
+            'tango_port': '9094',
+            'reset_database_file': True,
+            'tiled_host': 'localhost',
+            'tiled_port': '9091',
+            'acquisition_dir': 'outputs/tiled_acquisitions',
+            'tiled_autostart': True,
+            'tiled_register_on_startup': False,
+            'device_timeout_seconds': '120',
+        }
+    )
+
+    assert config['devices'] == {'custom_detector': {'module_name': 'asyncroscopy.devices.custom_detector'}}
+
+
 def test_server_gui_reads_and_writes_line_and_combo_inputs():
     class FakeLineEdit:
         def __init__(self):

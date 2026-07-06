@@ -36,15 +36,6 @@ from startup_guis.shared import BODY_FONT, CONFIG_DIR, GENERATED_CONFIG_DIR, SEC
 
 DEFAULT_CONFIG_PATH = CONFIG_DIR / 'Spectra300.yaml'
 GENERATED_CONFIG_PATH = GENERATED_CONFIG_DIR / 'server_gui.yaml'
-DEVICE_MODULES = {
-    'camera': 'asyncroscopy.instruments.electron_microscope.detectors.camera',
-    'corrector': 'asyncroscopy.instruments.electron_microscope.hardware.corrector',
-    'data': 'asyncroscopy.data.data',
-    'eds': 'asyncroscopy.instruments.electron_microscope.detectors.eds',
-    'flucam': 'asyncroscopy.instruments.electron_microscope.detectors.flucam',
-    'scan': 'asyncroscopy.instruments.electron_microscope.hardware.scan',
-    'stage': 'asyncroscopy.instruments.electron_microscope.hardware.stage',
-}
 INSTRUMENT_FILES = [
     'asyncroscopy/instruments/electron_microscope/auto_script.py',
     'asyncroscopy/instruments/electron_microscope/jeol.py',
@@ -79,6 +70,13 @@ def class_name_from_file(path_text: str, fallback: str = 'Instrument') -> str:
 
 def uses_hardware_connection(path_text: str) -> bool:
     return 'digital_twin' not in Path(path_text).stem
+
+
+def device_specs_from_config(config: dict) -> dict[str, dict]:
+    devices = config.get('devices') if isinstance(config, dict) else None
+    if devices is None:
+        devices = config
+    return dict(devices or {})
 
 
 def server_config_from_values(values: dict) -> dict:
@@ -179,16 +177,11 @@ class ServerGui(QMainWindow):
         data_server.layout().addRow('', register_on_startup)
         layout.addWidget(data_server)
 
-        devices = QGroupBox('Devices')
-        devices.setFont(SECTION_FONT)
-        device_grid = QGridLayout(devices)
-        for index, key in enumerate(DEVICE_MODULES):
-            checkbox = QCheckBox(key)
-            checkbox.setChecked(key in self.device_config)
-            checkbox.stateChanged.connect(self.refresh_yaml)
-            self.device_checks[key] = checkbox
-            device_grid.addWidget(checkbox, index // 2, index % 2)
-        layout.addWidget(devices)
+        self.devices = QGroupBox('Devices')
+        self.devices.setFont(SECTION_FONT)
+        self.device_grid = QGridLayout(self.devices)
+        self.populate_device_checks()
+        layout.addWidget(self.devices)
 
         actions = QHBoxLayout()
         start = action_button('Start', '#1f7a35', '#2ea043')
@@ -222,6 +215,20 @@ class ServerGui(QMainWindow):
 
     def add_row(self, group: QGroupBox, label: str, widget: QWidget) -> None:
         group.layout().addRow(label, widget)
+
+    def populate_device_checks(self) -> None:
+        while self.device_grid.count():
+            item = self.device_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.device_checks.clear()
+        for index, key in enumerate(device_specs_from_config(self.device_config)):
+            checkbox = QCheckBox(key)
+            checkbox.setChecked(True)
+            checkbox.stateChanged.connect(self.refresh_yaml)
+            self.device_checks[key] = checkbox
+            self.device_grid.addWidget(checkbox, index // 2, index % 2)
 
     def line_input(self, key: str, value) -> QLineEdit:
         widget = QLineEdit(str(value))
@@ -290,7 +297,7 @@ class ServerGui(QMainWindow):
             'tiled_register_on_startup': self.inputs['tiled_register_on_startup'].isChecked(),
             'device_timeout_seconds': self.input_text('device_timeout_seconds'),
             'enabled_devices': {key: checkbox.isChecked() for key, checkbox in self.device_checks.items()},
-            'devices': {key: self.device_config.get(key, {'module_name': DEVICE_MODULES[key]}) for key in DEVICE_MODULES},
+            'devices': {key: dict(spec) for key, spec in device_specs_from_config(self.device_config).items()},
             'instrument': self.default_config['instrument'],
         }
         return server_config_from_values(values)
@@ -327,8 +334,7 @@ class ServerGui(QMainWindow):
         self.inputs['tiled_autostart'].setChecked(bool(tiled.get('autostart', True)))
         self.inputs['tiled_register_on_startup'].setChecked(bool(tiled.get('register_on_startup', False)))
         self.set_input_text('device_timeout_seconds', config.get('device_timeout_seconds', 120))
-        for key, checkbox in self.device_checks.items():
-            checkbox.setChecked(key in self.device_config)
+        self.populate_device_checks()
         self.refresh_yaml()
         self.enqueue_output(f'Loaded {path}\n')
 
