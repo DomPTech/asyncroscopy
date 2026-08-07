@@ -31,10 +31,14 @@ class TangoConfig:
 class LLMConfig:
     tango: TangoConfig
     mcp_url: str
-    local_model_path: str | None = None
-    model_provider: str | None = None
-    model_name: str | None = None
+    
+    chat_model_name: str | None = None
     api_key: str | None = None
+    api_base: str | None = None
+
+    ollama_model: str | None = None
+    auto_pull_model: bool = True
+
     startup_agents: list[Agent] | None = None
 
     def __post_init__(self):

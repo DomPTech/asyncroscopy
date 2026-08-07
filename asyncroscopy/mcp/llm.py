@@ -51,11 +51,21 @@ class AgentState(TypedDict):
 
 
 class LLM(Device):
-    mcp_url = device_property(dtype=str, default_value="http://127.0.0.1:8000/mcp")
-    startup_agents = device_property(dtype=(str,), default_value=())
-    ollama_model = device_property(dtype=str, default_value="gemma4:31b")
-    use_init_chat_model = device_property(dtype=bool, default_value=False)
-    model_provider = device_property(dtype=str, default_value="ollama")
+    mcp_url = device_property(dtype=str, default_value="http://127.0.0.1:8000/mcp", doc="The URL of the MCP server to connect to.")
+    startup_agents = device_property(dtype=(str,), default_value=(), doc="List of JSON-serialized Agent configs to spawn on startup.")
+
+    # Provider selection
+    use_init_chat_model = device_property(dtype=bool, default_value=False, doc="If true, use the init_chat_model function to initialize the LLM.")
+    model_provider = device_property(dtype=str, default_value="ollama", doc="The model provider to use for the LLM. Options: 'ollama', 'openai', etc.")
+    
+    # Generic init_chat_model config
+    chat_model_name = device_property(dtype=str, default_value="gpt-4o", doc="The name of the chat model to use for the LLM")
+    api_key = device_property(dtype=str, default_value="", doc="The API key for the model provider")
+    api_base = device_property(dtype=str, default_value="", doc="The base URL for the API")
+    
+    # Ollama config 
+    ollama_model = device_property(dtype=str, default_value="gemma4:31b", doc="The Ollama model ID to use for the LLM")
+    auto_pull_model = device_property(dtype=bool, default_value=True, doc="If true, automatically pull the Ollama model if it is not already downloaded.")
 
     max_steps = attribute(label="Max Steps", dtype=int, access=tango.AttrWriteType.READ_WRITE)
 
@@ -81,17 +91,23 @@ class LLM(Device):
 
             if self.use_init_chat_model: # Initialize from most model providers (e.g., OpenAI)
                 self.info_stream("Initializing via init_chat_model")
-                self._model = init_chat_model(
-                    model=self.ollama_model,
-                    model_provider=self.model_provider,
-                    temperature=0
-                )
+
+                model_kwargs = {
+                    "model": self.chat_model_name,
+                    "model_provider": self.model_provider
+                }
+                if self.api_key:
+                    model_kwargs["api_key"] = self.api_key
+                if self.api_base:
+                    model_kwargs["api_base"] = self.api_base
+
+                self._model = init_chat_model(**model_kwargs)
             else: # Initialize locally via Ollama
                 from langchain_ollama import ChatOllama
                 self.info_stream("Initializing via ChatOllama")
                 self._model = ChatOllama(
                     model=self.ollama_model,
-                    temperature=0,
+                    temperature=0.7,
                     reasoning=False,
                 )
 
@@ -127,7 +143,7 @@ class LLM(Device):
         return [agent.name for agent in self._agents]
 
     async def ensure_ollama_running(self, host: str = "http://localhost:11434", timeout: int = 10) -> None:
-        """Check if Ollama server is running, offloaded to prevent blocking the Tango loop."""
+        """Check if Ollama server is running, starting it and downloading the model if necessary."""
         
         def _sync_check():
             tags_url = f"{host.rstrip('/')}/api/tags"
@@ -136,8 +152,19 @@ class LLM(Device):
                     return
             except (urllib.error.URLError, TimeoutError, ConnectionRefusedError):
                 pass
+            
+            if self.auto_pull_model: # Run command to download the model if it is not already
+                print(f"[SYSTEM]: Ensuring model '{self.ollama_model}' is pulled (this may take a while if it is not already downloaded)...")
+                try:
+                    subprocess.run(
+                        ["ollama", "pull", self.ollama_model], 
+                        check=True, 
+                        stderr=subprocess.DEVNULL
+                    )
+                except subprocess.CalledProcessError as e:
+                    raise RuntimeError(f"Failed to pull Ollama model {self.ollama_model}: {e}")
 
-            try:
+            try: # Run command to serve the model
                 subprocess.Popen(
                     ["ollama", "serve"],
                     stdout=subprocess.DEVNULL,
@@ -245,7 +272,7 @@ class LLM(Device):
         return text.strip()
 
     def _parse_routing_decision(self, content: str, valid_options: list[str], fallback: str) -> tuple[str, str]:
-        """Parse a supervisor response's {'next': ...} decision, falling back on any error or invalid value."""
+        """Parse a supervisor response's {'next': ...} decision with a fallback."""
         try:
             decision = json.loads(self._extract_json(content))
             next_agent = decision.get("next", fallback)
