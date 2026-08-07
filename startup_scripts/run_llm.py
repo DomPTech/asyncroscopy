@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
 
     register_device(config)
     
-    command = ["uv", "run", "python", "-m", "asyncroscopy.mcp.llm", INSTANCE_NAME]
+    command = [sys.executable, "-m", "asyncroscopy.mcp.llm", INSTANCE_NAME]
     env = {**os.environ, 'TANGO_HOST': tango_host, 'PYTHONUNBUFFERED': '1'}
 
     try:
