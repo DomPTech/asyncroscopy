@@ -51,7 +51,7 @@ class AgentState(TypedDict):
 
 
 class LLM(Device):
-    mcp_url = device_property(dtype=str, default_value="http://127.0.0.1:8000/mcp", doc="The URL of the MCP server to connect to.")
+    mcp_config = device_property(dtype=str, doc="JSON-serialized config of the MCP server to initially connect to.")
     startup_agents = device_property(dtype=(str,), default_value=(), doc="List of JSON-serialized Agent configs to spawn on startup.")
 
     # Provider selection
@@ -118,10 +118,9 @@ class LLM(Device):
             print(f"[SYSTEM]: Model pre-warmed in {time.time() - start_warmup:.2f}s!")
 
             # Connect to an MCP server initially if specified
-            if self.mcp_url:
-                config = json.dumps({"url": self.mcp_url, "transport": "streamable_http"})
-                if not await self.ConnectMCP(config):
-                    print(f"[SYSTEM]: Failed to connect to MCP Server at {self.mcp_url}.")
+            if self.mcp_config:
+                if not await self.ConnectMCP(self.mcp_config):
+                    print(f"[SYSTEM]: Failed to connect to MCP Server: {self.mcp_config}.")
 
             self.set_state(tango.DevState.ON)
         except Exception as e:
@@ -209,13 +208,11 @@ class LLM(Device):
         """Connect to an MCP server and inherit its tools. Returns true for success."""
         try:
             args = json.loads(config)
-            url = args.get("url")
-            transport = args.get("transport", "streamable_http")
 
             server_id = f"server_{len(self._mcp_clients)}"
-            client = MultiServerMCPClient({server_id: {"url": url, "transport": transport}})
+            client = MultiServerMCPClient({server_id: args})
 
-            print(f"\n[SYSTEM]: Connecting to MCP Server at {url}...")
+            print("\n[SYSTEM]: Connecting to MCP Server...")
 
             tools = await client.get_tools()
 
