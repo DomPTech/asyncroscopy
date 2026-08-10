@@ -51,7 +51,7 @@ class AgentState(TypedDict):
 
 
 class LLM(Device):
-    mcp_config = device_property(dtype=str, doc="JSON-serialized config of the MCP server to initially connect to.")
+    mcp_config = device_property(dtype=str, doc="JSON-serialized config of the MCP server to initially connect to: {'url': '...', 'transport': '...'}.")
     startup_agents = device_property(dtype=(str,), default_value=(), doc="List of JSON-serialized Agent configs to spawn on startup.")
 
     # Provider selection
@@ -79,7 +79,9 @@ class LLM(Device):
         # Registries
         self._agents: list[Agent] = []
         self._tools: list[BaseTool] = []
-        self._mcp_clients: list[MultiServerMCPClient] = []
+
+        # Manages MCP connections
+        self._mcp_client = MultiServerMCPClient({})
 
         if self.startup_agents:
             self._agents = [Agent(**json.loads(agent_json)) for agent_json in self.startup_agents]
@@ -140,6 +142,10 @@ class LLM(Device):
     def agents(self) -> list[str]:
         """Return a list of the names of all currently spawned agents."""
         return [agent.name for agent in self._agents]
+
+    @attribute(dtype=str)
+    def mcp_connections(self) -> str:
+        return str(self._mcp_client.connections)
 
     async def ensure_ollama_running(self, host: str = "http://localhost:11434", timeout: int = 10) -> None:
         """Check if Ollama server is running, starting it and downloading the model if necessary."""
@@ -209,16 +215,15 @@ class LLM(Device):
         try:
             args = json.loads(config)
 
-            server_id = f"server_{len(self._mcp_clients)}"
-            client = MultiServerMCPClient({server_id: args})
+            # Generate unique ID for this connection and add it to the client
+            server_id = f"server_{len(self._mcp_client.connections)}"
+            self._mcp_client.connections[server_id] = args
 
-            print("\n[SYSTEM]: Connecting to MCP Server...")
+            print(f"\n[SYSTEM]: Added MCP server {server_id}. Fetching tools...")
 
-            tools = await client.get_tools()
+            self._tools = await self._mcp_client.get_tools()
 
-            self._mcp_clients.append(client)
-            self._tools.extend(tools)
-            print(f"[SYSTEM]: Connected. Inherited {len(tools)} tools.")
+            print(f"[SYSTEM]: Connected. Inherited {len(self._tools)} tools.")
         except Exception as e:
             self.error_stream(f"Failed to connect to MCP server: {e}")
             return False
