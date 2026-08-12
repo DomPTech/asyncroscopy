@@ -74,16 +74,16 @@ def setup_llm_stubs():
 
 setup_llm_stubs()
 
-from asyncroscopy.mcp.llm import Agent, LLM
+from asyncroscopy.mcp.langgraph_llm import Agent, LangGraphLLM
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_llm(**kwargs) -> LLM:
-    """Return a bare LLM instance without touching Tango at all."""
-    device = LLM.__new__(LLM)
+def _make_llm(**kwargs) -> LangGraphLLM:
+    """Return a bare LangGraphLLM instance without touching Tango at all."""
+    device = LangGraphLLM.__new__(LangGraphLLM)
     device._max_steps = kwargs.get("max_steps", 5)
     device._agents: list[Agent] = kwargs.get("agents", [])
     device._tools = kwargs.get("tools", [])
